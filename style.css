@@ -1,0 +1,133 @@
+:root { --gap: 12px; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", Arial, sans-serif;
+  background: #f6f7f9;
+  color: #111;
+}
+
+.wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
+.top {
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
+}
+
+h1 { margin: 0 0 6px 0; font-size: 20px; }
+.sub { margin: 0 0 14px 0; color: #555; font-size: 14px; line-height: 1.4; }
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr 160px 200px 92px;
+  gap: var(--gap);
+}
+.controls input, .controls select, .controls button {
+  height: 48px; /* 전자칠판/터치 고려 */
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  padding: 0 12px;
+  font-size: 14px;
+  background: #fff;
+}
+.controls button {
+  cursor: pointer;
+  border: 1px solid #222;
+  background: #222;
+  color: #fff;
+  font-weight: 600;
+}
+.controls button:hover { opacity: .9; }
+
+.meta { margin-top: 12px; color: #333; font-size: 13px; display:flex; gap: 10px; align-items:center; flex-wrap: wrap; }
+.status { color:#555; }
+
+.section { margin-top: 16px; }
+.h2 { margin: 0 0 10px 4px; font-size: 15px; color: #222; }
+
+.grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
+  border: 1px solid #eee;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 3/4;
+  overflow: hidden;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: #f2f2f2;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumb .ph {
+  font-size: 12px;
+  color:#777;
+  padding: 0 10px;
+  text-align:center;
+}
+
+.card .title {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  line-height: 1.35;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.card .line {
+  margin: 0;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.badges { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.badge {
+  display: inline-flex;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+  color: #333;
+}
+
+.empty {
+  grid-column: 1 / -1;
+  padding: 20px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px dashed #ddd;
+  color: #555;
+  text-align: center;
+}
+
+.foot { padding: 18px 6px; color: #777; text-align: center; }
+
+@media (max-width: 860px) {
+  .controls { grid-template-columns: 1fr 1fr; }
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .controls { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: 1fr; }
+}

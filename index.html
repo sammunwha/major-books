@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>학과별 추천도서 검색</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <h1>학과별 추천도서 검색</h1>
+      <p class="sub">
+        학과/도서/저자/출판사를 검색하거나, 고등학교 계열 또는 희망 학과로 필터링해 보세요.
+      </p>
+
+      <div class="controls">
+        <input id="q" type="search" placeholder="예) 경영학과, 넛지, 탈러, 인사이트…" autocomplete="off" />
+
+        <select id="track">
+          <option value="">고등학교 계열 전체</option>
+          <option value="인문계열">인문계열</option>
+          <option value="자연계열">자연계열</option>
+          <option value="예체능계열">예체능계열</option>
+        </select>
+
+        <select id="major">
+          <option value="">학과 전체</option>
+        </select>
+
+        <button id="reset" type="button">초기화</button>
+      </div>
+
+      <div class="meta">
+        <span><strong id="count">0</strong>건 (내 DB)</span>
+        <span id="naverStatus" class="status"></span>
+      </div>
+    </header>
+
+    <!-- 내 DB 결과 -->
+    <section class="section">
+      <h2 class="h2">내 DB 추천 도서</h2>
+      <div id="list" class="grid" aria-live="polite"></div>
+    </section>
+
+    <!-- 네이버 도서 검색 결과 -->
+    <section class="section">
+      <h2 class="h2">네이버 도서 검색 결과</h2>
+      <div id="naverList" class="grid" aria-live="polite"></div>
+    </section>
+
+    <footer class="foot">
+      <small>© 교육 콘텐츠 전문기업 (주)삼양문화</small>
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
