@@ -13,9 +13,9 @@ let DB = [];
 let lastNaverQuery = "";
 let naverDebounceTimer = null;
 
-const COVER_CACHE_PREFIX = "cover_v1:"; // 로컬 캐시 키 prefix
-const COVER_NEG_TTL_MS = 1000 * 60 * 60 * 24; // 24시간: 못 찾았을 때도 캐시(재조회 과다 방지)
-const COVER_POS_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30일: 찾은 표지 캐시
+const COVER_CACHE_PREFIX = "cover_v3:"; // 캐시 리셋 포함
+const COVER_NEG_TTL_MS = 1000 * 60 * 60 * 24; // 24시간
+const COVER_POS_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30일
 
 function norm(s) { return (s ?? "").toString().trim(); }
 function normSearch(s) { return norm(s).toLowerCase(); }
@@ -29,7 +29,6 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-// 네이버 결과에는 <b>가 들어오는 경우가 있어 제거
 function stripTags(s) {
   return norm(s).replace(/<[^>]*>/g, "");
 }
@@ -39,8 +38,9 @@ function buildMajorOptions(data, selectedTrack) {
   data.forEach(d => {
     if (!selectedTrack || d.track === selectedTrack) majors.add(d.major);
   });
-  const sorted = [...majors].sort((a,b) => a.localeCompare(b, "ko"));
-  els.major.innerHTML = `<option value="">학과 전체</option>` +
+  const sorted = [...majors].sort((a, b) => a.localeCompare(b, "ko"));
+  els.major.innerHTML =
+    `<option value="">학과 전체</option>` +
     sorted.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
 }
 
@@ -64,17 +64,15 @@ function cacheSet(key, value, ttlMs) {
     const obj = { value, exp: Date.now() + ttlMs };
     localStorage.setItem(key, JSON.stringify(obj));
   } catch {
-    // localStorage 꽉 찼을 때 등은 그냥 무시
+    // ignore
   }
 }
 
 function coverCacheKey(d) {
-  // title+author+publisher 조합으로 키 생성
   const base = `${norm(d.title)}|${norm(d.author)}|${norm(d.publisher)}`;
   return COVER_CACHE_PREFIX + base;
 }
 
-// 네이버 API(프록시 함수) 호출
 async function naverSearch(query, display = 10) {
   const url = `/.netlify/functions/naver-book?q=${encodeURIComponent(query)}&display=${display}&sort=sim`;
   const res = await fetch(url, { cache: "no-store" });
@@ -85,30 +83,17 @@ async function naverSearch(query, display = 10) {
   return await res.json();
 }
 
-// “내 DB 카드” 표지 매칭: 도서명 + 저자 중심으로 검색
-
-
-  try {
-    const json = await naverSearch(q, 5);
-    const items = Array.isArray(json.items) ? json.items : [];
-    if (!items.length) {
-      cacheSet(key, null, COVER_NEG_TTL_MS);
-      return null;
-    }
-// ===== 표지 매칭 정확도 향상 버전 =====
-
-// 한글/영문/숫자만 남기고 비교용으로 정규화
+// ===== 표지 매칭 정확도 향상 =====
 function normalizeKey(s) {
   return (s || "")
     .toString()
     .toLowerCase()
-    .replace(/<[^>]*>/g, "")                // 네이버 <b> 제거
-    .replace(/[^\p{L}\p{N}]+/gu, " ")       // 문자/숫자 외 제거 (유니코드)
+    .replace(/<[^>]*>/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// 저자 표기 흔들림 보정(공저/역/엮음 등 제거)
 function normalizeAuthor(s) {
   return normalizeKey(s)
     .replace(/\b(지음|저|글|엮음|편|편저|그림|역|옮김|번역|감수)\b/gu, "")
@@ -116,7 +101,6 @@ function normalizeAuthor(s) {
     .trim();
 }
 
-// 간단 점수화: 제목 유사도 + 저자 포함 + 출판사 포함 + ISBN 힌트
 function scoreCandidate(d, it) {
   const dTitle = normalizeKey(d.title);
   const dAuthor = normalizeAuthor(d.author);
@@ -129,48 +113,36 @@ function scoreCandidate(d, it) {
 
   let score = 0;
 
-  // 제목 포함(가장 중요)
   if (itTitle.includes(dTitle) || dTitle.includes(itTitle)) score += 70;
   else {
-    // 제목 단어 일부라도 겹치면 가점
     const dWords = dTitle.split(" ").filter(Boolean);
     const hit = dWords.filter(w => w.length >= 2 && itTitle.includes(w)).length;
     score += Math.min(hit * 10, 40);
   }
 
-  // 저자 포함
   if (dAuthor && (itAuthor.includes(dAuthor) || dAuthor.includes(itAuthor))) score += 25;
-
-  // 출판사 포함
   if (dPub && (itPub.includes(dPub) || dPub.includes(itPub))) score += 12;
-
-  // ISBN 값이 있으면 약간 가점 (DB에 ISBN 없더라도, 후보가 진짜일 확률 ↑)
   if (itIsbn) score += 3;
 
   return score;
 }
 
-// 여러 검색어를 시도해서 성공률을 올림
 function buildQueries(d) {
   const title = norm(d.title);
   const author = norm(d.author);
   const publisher = norm(d.publisher);
 
-  // 1순위: 제목+저자+출판사
   const q1 = [title, author, publisher].filter(Boolean).join(" ").trim();
-  // 2순위: 제목+저자
   const q2 = [title, author].filter(Boolean).join(" ").trim();
-  // 3순위: 제목만 (희귀 케이스 구출용)
   const q3 = title;
 
-  // 중복 제거
   return [...new Set([q1, q2, q3].filter(Boolean))];
 }
 
 async function resolveCoverForItem(d) {
   const key = coverCacheKey(d);
   const cached = cacheGet(key);
-  if (cached) return cached.value; // {image, link} 또는 null
+  if (cached) return cached.value;
 
   const queries = buildQueries(d);
   if (queries.length === 0) {
@@ -179,8 +151,8 @@ async function resolveCoverForItem(d) {
   }
 
   try {
-    // 여러 번 호출하면 제한에 걸릴 수 있어 display는 10, 쿼리 최대 2~3개만 시도
     const MAX_TRIES = 3;
+    const PASS = 60;
 
     for (let i = 0; i < Math.min(queries.length, MAX_TRIES); i++) {
       const q = queries[i];
@@ -188,7 +160,6 @@ async function resolveCoverForItem(d) {
       const items = Array.isArray(json.items) ? json.items : [];
       if (!items.length) continue;
 
-      // 후보 점수화 후 최고점 선택
       let best = null;
       let bestScore = -1;
 
@@ -203,48 +174,17 @@ async function resolveCoverForItem(d) {
       const image = best?.image ? norm(best.image) : "";
       const link = best?.link ? norm(best.link) : "";
 
-      // “최소 합격점” 기준: 너무 낮으면 잘못된 표지가 붙을 수 있으니 컷
-      // (684권 규모에서는 55~65 사이 추천)
-      const PASS = 60;
-
       if (image && bestScore >= PASS) {
         const value = { image, link };
         cacheSet(key, value, COVER_POS_TTL_MS);
         return value;
       }
-
-      // 1차 쿼리에서 점수가 낮으면 2차(제목+저자), 3차(제목만)로 넘어가 재시도
     }
 
     cacheSet(key, null, COVER_NEG_TTL_MS);
     return null;
   } catch {
-    cacheSet(key, null, 1000 * 60 * 10); // 10분
-    return null;
-  }
-}
-
-    // 1순위: title이 유사한 항목
-    const targetTitle = normSearch(d.title);
-    let best = items.find(it => normSearch(stripTags(it.title)).includes(targetTitle));
-
-    // 없으면 첫 번째
-    if (!best) best = items[0];
-
-    const image = best?.image ? norm(best.image) : "";
-    const link = best?.link ? norm(best.link) : "";
-
-    if (!image) {
-      cacheSet(key, null, COVER_NEG_TTL_MS);
-      return null;
-    }
-
-    const value = { image, link };
-    cacheSet(key, value, COVER_POS_TTL_MS);
-    return value;
-  } catch {
-    // 실패해도 과호출 방지 위해 짧게 negative 캐시
-    cacheSet(key, null, 1000 * 60 * 10); // 10분
+    cacheSet(key, null, 1000 * 60 * 10);
     return null;
   }
 }
@@ -261,15 +201,12 @@ function renderLocal(items) {
     return;
   }
 
-  // 우선 표지 없는 상태로 렌더링
   els.list.innerHTML = items.map((d, idx) => {
     const title = escapeHtml(d.title);
     const author = escapeHtml(d.author);
     const publisher = escapeHtml(d.publisher);
     const major = escapeHtml(d.major);
     const track = escapeHtml(d.track);
-
-    // data-ck로 캐시키 저장(후처리로 이미지 주입)
     const ck = escapeHtml(coverCacheKey(d));
 
     return `
@@ -286,12 +223,9 @@ function renderLocal(items) {
     `;
   }).join("");
 
-  // 표지 매칭은 “필터링 결과 상위 일부만” 수행(과호출 방지)
-  // 필요 시 숫자 조정 가능
-  const MAX_COVER_LOOKUPS = 18;
+  const MAX_COVER_LOOKUPS = 30;
   const slice = items.slice(0, MAX_COVER_LOOKUPS);
 
-  // 순차 호출(동시성 높이면 초당 제한에 걸릴 수 있어 안전하게)
   (async () => {
     for (let i = 0; i < slice.length; i++) {
       const d = slice[i];
@@ -310,8 +244,6 @@ function renderLocal(items) {
       }
 
       const img = `<img src="${escapeHtml(cover.image)}" alt="${escapeHtml(d.title)} 표지" loading="lazy" />`;
-
-      // 표지 클릭 시 네이버 링크로 이동(원치 않으면 아래 <a> 제거)
       if (cover.link) {
         thumb.innerHTML = `<a href="${escapeHtml(cover.link)}" target="_blank" rel="noopener noreferrer">${img}</a>`;
       } else {
@@ -382,18 +314,15 @@ function applyLocalFilter() {
 function scheduleNaverSearch() {
   const q = norm(els.q.value);
 
-  // 네이버 검색은 “검색어가 있을 때만”
   if (!q) {
     els.naverStatus.textContent = "";
     renderNaver([], "");
     return;
   }
 
-  // 이전 타이머 취소 후 디바운스
   if (naverDebounceTimer) clearTimeout(naverDebounceTimer);
 
   naverDebounceTimer = setTimeout(async () => {
-    // 동일 검색어 재호출 방지
     if (q === lastNaverQuery) return;
     lastNaverQuery = q;
 
@@ -425,6 +354,7 @@ function resetAll() {
 
 async function init() {
   const res = await fetch("data.json", { cache: "no-store" });
+  if (!res.ok) throw new Error(`data.json load failed: ${res.status}`);
   DB = await res.json();
 
   DB = DB.map(d => ({
@@ -437,11 +367,9 @@ async function init() {
 
   buildMajorOptions(DB, "");
 
-  // 초기 렌더
   applyLocalFilter();
   renderNaver([], "");
 
-  // 이벤트
   els.q.addEventListener("input", () => {
     applyLocalFilter();
     scheduleNaverSearch();
@@ -460,7 +388,6 @@ async function init() {
 
 init().catch(err => {
   console.error(err);
-  renderEmpty(els.list, "초기 로딩 실패: data.json을 확인해주세요.");
+  renderEmpty(els.list, "초기 로딩 실패: data.json 또는 script.js 오류를 확인해주세요.");
   renderEmpty(els.naverList, "초기 로딩 실패");
 });
-
