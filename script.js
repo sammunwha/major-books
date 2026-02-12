@@ -86,18 +86,7 @@ async function naverSearch(query, display = 10) {
 }
 
 // “내 DB 카드” 표지 매칭: 도서명 + 저자 중심으로 검색
-async function resolveCoverForItem(d) {
-  const key = coverCacheKey(d);
-  const cached = cacheGet(key);
-  if (cached) return cached.value; // {image, link} 또는 null
 
-  // 검색어는 너무 길게 쓰지 않는 게 오히려 정확합니다.
-  // (저자명까지 포함)
-  const q = `${norm(d.title)} ${norm(d.author)}`.trim();
-  if (!q) {
-    cacheSet(key, null, COVER_NEG_TTL_MS);
-    return null;
-  }
 
   try {
     const json = await naverSearch(q, 5);
@@ -106,6 +95,134 @@ async function resolveCoverForItem(d) {
       cacheSet(key, null, COVER_NEG_TTL_MS);
       return null;
     }
+// ===== 표지 매칭 정확도 향상 버전 =====
+
+// 한글/영문/숫자만 남기고 비교용으로 정규화
+function normalizeKey(s) {
+  return (s || "")
+    .toString()
+    .toLowerCase()
+    .replace(/<[^>]*>/g, "")                // 네이버 <b> 제거
+    .replace(/[^\p{L}\p{N}]+/gu, " ")       // 문자/숫자 외 제거 (유니코드)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// 저자 표기 흔들림 보정(공저/역/엮음 등 제거)
+function normalizeAuthor(s) {
+  return normalizeKey(s)
+    .replace(/\b(지음|저|글|엮음|편|편저|그림|역|옮김|번역|감수)\b/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// 간단 점수화: 제목 유사도 + 저자 포함 + 출판사 포함 + ISBN 힌트
+function scoreCandidate(d, it) {
+  const dTitle = normalizeKey(d.title);
+  const dAuthor = normalizeAuthor(d.author);
+  const dPub = normalizeKey(d.publisher);
+
+  const itTitle = normalizeKey(stripTags(it.title));
+  const itAuthor = normalizeAuthor(stripTags(it.author));
+  const itPub = normalizeKey(stripTags(it.publisher));
+  const itIsbn = normalizeKey(it.isbn || "");
+
+  let score = 0;
+
+  // 제목 포함(가장 중요)
+  if (itTitle.includes(dTitle) || dTitle.includes(itTitle)) score += 70;
+  else {
+    // 제목 단어 일부라도 겹치면 가점
+    const dWords = dTitle.split(" ").filter(Boolean);
+    const hit = dWords.filter(w => w.length >= 2 && itTitle.includes(w)).length;
+    score += Math.min(hit * 10, 40);
+  }
+
+  // 저자 포함
+  if (dAuthor && (itAuthor.includes(dAuthor) || dAuthor.includes(itAuthor))) score += 25;
+
+  // 출판사 포함
+  if (dPub && (itPub.includes(dPub) || dPub.includes(itPub))) score += 12;
+
+  // ISBN 값이 있으면 약간 가점 (DB에 ISBN 없더라도, 후보가 진짜일 확률 ↑)
+  if (itIsbn) score += 3;
+
+  return score;
+}
+
+// 여러 검색어를 시도해서 성공률을 올림
+function buildQueries(d) {
+  const title = norm(d.title);
+  const author = norm(d.author);
+  const publisher = norm(d.publisher);
+
+  // 1순위: 제목+저자+출판사
+  const q1 = [title, author, publisher].filter(Boolean).join(" ").trim();
+  // 2순위: 제목+저자
+  const q2 = [title, author].filter(Boolean).join(" ").trim();
+  // 3순위: 제목만 (희귀 케이스 구출용)
+  const q3 = title;
+
+  // 중복 제거
+  return [...new Set([q1, q2, q3].filter(Boolean))];
+}
+
+async function resolveCoverForItem(d) {
+  const key = coverCacheKey(d);
+  const cached = cacheGet(key);
+  if (cached) return cached.value; // {image, link} 또는 null
+
+  const queries = buildQueries(d);
+  if (queries.length === 0) {
+    cacheSet(key, null, COVER_NEG_TTL_MS);
+    return null;
+  }
+
+  try {
+    // 여러 번 호출하면 제한에 걸릴 수 있어 display는 10, 쿼리 최대 2~3개만 시도
+    const MAX_TRIES = 3;
+
+    for (let i = 0; i < Math.min(queries.length, MAX_TRIES); i++) {
+      const q = queries[i];
+      const json = await naverSearch(q, 10);
+      const items = Array.isArray(json.items) ? json.items : [];
+      if (!items.length) continue;
+
+      // 후보 점수화 후 최고점 선택
+      let best = null;
+      let bestScore = -1;
+
+      for (const it of items) {
+        const sc = scoreCandidate(d, it);
+        if (sc > bestScore) {
+          bestScore = sc;
+          best = it;
+        }
+      }
+
+      const image = best?.image ? norm(best.image) : "";
+      const link = best?.link ? norm(best.link) : "";
+
+      // “최소 합격점” 기준: 너무 낮으면 잘못된 표지가 붙을 수 있으니 컷
+      // (684권 규모에서는 55~65 사이 추천)
+      const PASS = 60;
+
+      if (image && bestScore >= PASS) {
+        const value = { image, link };
+        cacheSet(key, value, COVER_POS_TTL_MS);
+        return value;
+      }
+
+      // 1차 쿼리에서 점수가 낮으면 2차(제목+저자), 3차(제목만)로 넘어가 재시도
+    }
+
+    cacheSet(key, null, COVER_NEG_TTL_MS);
+    return null;
+  } catch {
+    cacheSet(key, null, 1000 * 60 * 10); // 10분
+    return null;
+  }
+}
 
     // 1순위: title이 유사한 항목
     const targetTitle = normSearch(d.title);
@@ -346,3 +463,4 @@ init().catch(err => {
   renderEmpty(els.list, "초기 로딩 실패: data.json을 확인해주세요.");
   renderEmpty(els.naverList, "초기 로딩 실패");
 });
+
