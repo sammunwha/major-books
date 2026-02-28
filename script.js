@@ -139,8 +139,8 @@ async function resolveCoverForItem(d) {
 
     const best = scored[0];
 
-    // 점수 80 이상이면 정확 매칭으로 자동 적용
-    if (best._score >= 80) {
+    // 점수 50 이상이면 정확 매칭으로 자동 적용
+    if (best._score >= 50) {
       const value = { matched: true, image: norm(best.image), link: norm(best.link || "") };
       cacheSet(key, value, COVER_POS_TTL_MS);
       return value;
@@ -322,13 +322,13 @@ function renderLocal(items) {
     `;
   }).join("");
 
-  // 탐구 주제 버튼 이벤트 위임
-  els.list.addEventListener("click", function handler(e) {
-    const btn = e.target.closest(".btn-explore");
-    if (!btn) return;
-    const idx = parseInt(btn.dataset.idx, 10);
-    showExploreModal(items[idx]);
-  }, { once: true });
+  // 탐구 주제 버튼 이벤트 위임 (이벤트 위임 방식 - 카드 자체에 직접 바인딩)
+  els.list.querySelectorAll(".btn-explore").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      showExploreModal(items[idx]);
+    });
+  });
 
   // 표지 매칭은 “필터링 결과 상위 일부만” 수행(과호출 방지)
   // 필요 시 숫자 조정 가능
@@ -359,10 +359,16 @@ function renderLocal(items) {
         continue;
       }
 
-      // 정확 매칭된 표지 바로 적용
-      const img = `<img src="${escapeHtml(cover.image)}" alt="${escapeHtml(d.title)} 표지" loading="lazy" />`;
-      if (cover.link) {
-        thumb.innerHTML = `<a href="${escapeHtml(cover.link)}" target="_blank" rel="noopener noreferrer">${img}</a>`;
+      // 정확 매칭 또는 구버전 캐시 형식({ image, link }) 모두 처리
+      const coverImage = cover.image;
+      const coverLink = cover.link || "";
+      if (!coverImage) {
+        thumb.innerHTML = `<div class="ph">표지 없음</div>`;
+        continue;
+      }
+      const img = `<img src="${escapeHtml(coverImage)}" alt="${escapeHtml(d.title)} 표지" loading="lazy" />`;
+      if (coverLink) {
+        thumb.innerHTML = `<a href="${escapeHtml(coverLink)}" target="_blank" rel="noopener noreferrer">${img}</a>`;
       } else {
         thumb.innerHTML = img;
       }
