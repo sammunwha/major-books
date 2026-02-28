@@ -64,6 +64,7 @@ h1 { margin: 0 0 6px 0; font-size: 20px; }
 .thumb {
   width: 100%;
   aspect-ratio: 3/4;
+  min-height: 160px;
   overflow: hidden;
   border-radius: 12px;
   margin-bottom: 10px;
@@ -122,6 +123,173 @@ h1 { margin: 0 0 6px 0; font-size: 20px; }
 }
 
 .foot { padding: 18px 6px; color: #777; text-align: center; }
+
+/* 후보 표지 선택 UI */
+.cover-candidates {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+}
+.cand-label {
+  font-size: 11px;
+  color: #555;
+  margin: 0;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.3;
+}
+.cand-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+.cand-btn {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
+  aspect-ratio: 2/3;
+  transition: border-color .15s, transform .1s, box-shadow .15s;
+}
+.cand-btn:hover {
+  border-color: #4f46e5;
+  transform: scale(1.06);
+  box-shadow: 0 4px 12px rgba(79,70,229,.3);
+  z-index: 1;
+  position: relative;
+}
+.cand-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+
+.btn-explore {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  letter-spacing: -0.2px;
+}
+.btn-explore:hover { opacity: .88; transform: translateY(-1px); }
+.btn-explore:active { transform: translateY(0); }
+
+/* 모달 */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn .18s ease;
+}
+@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+.modal-box {
+  background: #fff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+  animation: slideUp .22s ease;
+}
+@keyframes slideUp { from { transform: translateY(20px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+
+.modal-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 22px 22px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
+}
+.modal-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px;
+  margin-bottom: 6px;
+  letter-spacing: .3px;
+}
+.modal-title { margin: 0 0 4px; font-size: 17px; font-weight: 800; line-height: 1.3; word-break: keep-all; }
+.modal-sub { margin: 0; font-size: 13px; color: #777; }
+.modal-close {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border-radius: 50%; border: 1px solid #eee;
+  background: #f8f8f8; cursor: pointer;
+  font-size: 14px; color: #555;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.modal-close:hover { background: #eee; }
+
+.modal-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-loading {
+  display: flex; align-items: center; gap: 12px;
+  color: #666; font-size: 14px;
+  padding: 20px 0;
+}
+.spinner {
+  width: 22px; height: 22px; flex-shrink: 0;
+  border: 3px solid #e0e0e0;
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.modal-result { font-size: 14px; line-height: 1.6; }
+
+.topic-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: #faf8ff;
+  border: 1px solid #ede9fe;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.topic-num {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800;
+}
+.topic-head { display: block; font-size: 14px; font-weight: 800; margin-bottom: 3px; color: #1e1b4b; }
+.topic-desc { margin: 0; color: #444; }
+.topic-plain { margin: 0; }
+
+@media (max-width: 520px) {
+  .modal-box { border-radius: 16px; }
+  .modal-header, .modal-body { padding: 16px; }
+}
 
 @media (max-width: 860px) {
   .controls { grid-template-columns: 1fr 1fr; }
