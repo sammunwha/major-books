@@ -370,8 +370,6 @@ function renderLocal(items) {
   })();
 }
 
-}
-
 function renderNaver(items, q) {
   if (!q.trim()) {
     renderEmpty(els.naverList, "검색어를 입력하면 네이버 도서 검색 결과가 표시됩니다.");
