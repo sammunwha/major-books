@@ -202,31 +202,21 @@ function renderEmpty(targetEl, msg) {
 
 // AI 탐구 주제 생성 함수
 async function fetchExploreTopics(book) {
-  const prompt = `다음 도서에 대해 고등학생이 세특(학생부 교과 세부능력 및 특기사항)에 활용할 수 있는 탐구 주제 5가지를 제안해 주세요.
-
-도서 정보:
-- 제목: ${book.title}
-- 저자: ${book.author}
-- 추천 학과: ${book.major} (${book.track})
-
-탐구 주제는 아래 형식으로 작성해 주세요:
-1. [탐구 주제 제목]: 탐구 내용 한 줄 설명
-2. ...
-
-간결하고 실용적으로, 학문적 깊이가 느껴지도록 작성해 주세요.`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  // Netlify 프록시 함수를 통해 Claude API 호출 (CORS 방지)
+  const response = await fetch("/.netlify/functions/claude-explore", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }]
+      title: book.title,
+      author: book.author,
+      major: book.major,
+      track: book.track,
     })
   });
 
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
   const data = await response.json();
-  return data.content?.[0]?.text || "탐구 주제를 생성하지 못했습니다.";
+  return data.text || "탐구 주제를 생성하지 못했습니다.";
 }
 
 // 탐구 주제 모달 표시
