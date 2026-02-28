@@ -109,21 +109,39 @@ async function resolveCoverForItem(d) {
       return null;
     }
 
-    const targetTitle = normSearch(d.title);
+    // 괄호 앞 핵심 제목만 추출 (예: "넛지 (파이널 에디션...)" → "넛지")
+    function coreTitle(s) {
+      return normSearch(s).replace(/[(\[（［].*$/g, "").replace(/[=:：]/g, " ").trim();
+    }
+
+    const targetCore = coreTitle(d.title);
+    const targetFull = normSearch(d.title);
     const targetAuthor = normSearch(d.author);
 
     function similarity(it) {
-      const t = normSearch(stripTags(it.title));
+      const tFull = normSearch(stripTags(it.title));
+      const tCore = coreTitle(stripTags(it.title));
       const a = normSearch(stripTags(it.author));
       let score = 0;
-      if (t === targetTitle) score += 100;
-      else if (t.includes(targetTitle) || targetTitle.includes(t)) score += 60;
+
+      // 제목 비교 (핵심 제목 기준 우선)
+      if (tCore === targetCore && targetCore.length > 0) score += 100;
+      else if (tFull === targetFull) score += 100;
+      else if (tFull.includes(targetCore) || targetCore.includes(tCore)) score += 70;
+      else if (tFull.includes(targetFull) || targetFull.includes(tCore)) score += 60;
       else {
-        const words = targetTitle.split(/\s+/).filter(w => w.length > 1);
-        const matched = words.filter(w => t.includes(w)).length;
-        score += words.length > 0 ? (matched / words.length) * 40 : 0;
+        // 단어 단위 매칭
+        const words = targetCore.split(/\s+/).filter(w => w.length > 0);
+        const matched = words.filter(w => tFull.includes(w)).length;
+        score += words.length > 0 ? (matched / words.length) * 50 : 0;
       }
-      if (targetAuthor && a.includes(targetAuthor.split(/\s+/)[0])) score += 20;
+
+      // 저자 보정
+      if (targetAuthor) {
+        const firstAuthor = targetAuthor.split(/[\s\^,]/)[0];
+        if (firstAuthor && a.includes(firstAuthor)) score += 20;
+      }
+
       return score;
     }
 
@@ -139,14 +157,14 @@ async function resolveCoverForItem(d) {
 
     const best = scored[0];
 
-    // 점수 50 이상이면 정확 매칭으로 자동 적용
-    if (best._score >= 50) {
+    // 점수 40 이상이면 자동 적용 (기준 완화)
+    if (best._score >= 40) {
       const value = { matched: true, image: norm(best.image), link: norm(best.link || "") };
       cacheSet(key, value, COVER_POS_TTL_MS);
       return value;
     }
 
-    // 그 외: 후보 목록 반환 (사용자 선택 필요 → 캐시 안 함)
+    // 그 외: 후보 목록 반환 (표지 있는 것만)
     const candidates = scored.slice(0, 6).map(it => ({
       title: stripTags(it.title),
       author: stripTags(it.author),
@@ -154,7 +172,11 @@ async function resolveCoverForItem(d) {
       link: norm(it.link || ""),
     }));
 
-    return { matched: false, candidates };
+    // 후보가 있으면 보여주고, 없으면 그냥 첫 번째 결과 사용
+    if (candidates.length > 0) {
+      return { matched: false, candidates };
+    }
+    return null;
 
   } catch {
     cacheSet(key, null, 1000 * 60 * 10);
